@@ -16,8 +16,8 @@ import (
 
 	"github.com/influxdata/influxdb-comparisons/bulk_load"
 	"github.com/influxdata/influxdb-comparisons/util/report"
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgxpool"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 
 	"bytes"
 	"context"
@@ -603,6 +603,18 @@ func (l *TimescaleBulkLoad) processBatchesBin(conn *pgx.Conn, workersGroup *sync
 const createDatabaseSql = "create database " + DatabaseName + ";"
 const createExtensionSql = "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
 
+var MetaqueryCreateTableSql = []string{
+	"CREATE table example_measurement(time bigint not null,X TEXT,Y TEXT,val float8)",
+}
+
+var MetaqueryCreateHypertableSql = []string{
+	"select create_hypertable('example_measurement','time', chunk_time_interval => %d);",
+}
+
+var MetaqueryCreateIndexSql = []string{
+	"CREATE index example_measurement_index on example_measurement(X, Y , time DESC);",
+}
+
 var DevopsCreateTableSql = []string{
 	"CREATE table cpu(time bigint not null,hostname TEXT,region TEXT,datacenter TEXT,rack TEXT,os TEXT,arch TEXT,team TEXT,service TEXT,service_version TEXT,service_environment TEXT,usage_user float8,usage_system float8,usage_idle float8,usage_nice float8,usage_iowait float8,usage_irq float8,usage_softirq float8,usage_steal float8,usage_guest float8,usage_guest_nice float8);",
 	"CREATE table diskio(time bigint not null, hostname TEXT, region TEXT, datacenter TEXT, rack TEXT, os TEXT, arch TEXT, team TEXT, service TEXT, service_version TEXT, service_environment TEXT, serial TEXT, reads bigint, writes bigint, read_bytes bigint, write_bytes bigint, read_time bigint, write_time bigint, io_time bigint );",
@@ -743,6 +755,13 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 			log.Fatal(err)
 		}
 	}
+	for _, sql := range MetaqueryCreateTableSql {
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	for _, sql := range devopsCreateIndexSql {
 		_, err = conn.Exec(context.Background(), sql)
 		fmt.Println(sql)
@@ -751,6 +770,13 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 		}
 	}
 	for _, sql := range iotCreateIndexSql {
+		_, err = conn.Exec(context.Background(), sql)
+		fmt.Println(sql)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	for _, sql := range MetaqueryCreateIndexSql {
 		_, err = conn.Exec(context.Background(), sql)
 		fmt.Println(sql)
 		if err != nil {
@@ -771,5 +797,11 @@ func (l *TimescaleBulkLoad) createDatabase(daemon_url string) {
 			log.Fatal(err)
 		}
 	}
-
+	for _, sql := range MetaqueryCreateHypertableSql {
+		_, err = conn.Exec(context.Background(), fmt.Sprintf(sql, l.chunkDuration.Nanoseconds()))
+		fmt.Println(sql)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
